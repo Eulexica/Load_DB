@@ -5,7 +5,7 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, Registry, Menus,
-  StdCtrls, cxButtons, DateUtils, ShellAPI,
+  StdCtrls, DateUtils, ShellAPI,
   JvDialogs, INIFiles, ActnList, ActnMan,
   StrUtils,  XPStyleActnCtrls, System.Actions,
   Data.Bind.ObjectScope, System.IOUtils,
