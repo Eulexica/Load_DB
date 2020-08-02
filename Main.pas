@@ -4,12 +4,13 @@ interface
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, Registry, Menus, cxControls, cxContainer, cxEdit, cxLabel,
+  Dialogs, Registry, Menus,
   StdCtrls, cxButtons, DateUtils, ShellAPI,
-  JvDialogs, cxTextEdit, cxMaskEdit, cxButtonEdit, cxGraphics,
-  cxDropDownEdit, cxGroupBox, cxRadioGroup, INIFiles, ActnList, ActnMan,
-  StrUtils, cxLookAndFeels, XPStyleActnCtrls, System.Actions,
-  Data.Bind.ObjectScope, System.IOUtils, cxLookAndFeelPainters;
+  JvDialogs, INIFiles, ActnList, ActnMan,
+  StrUtils,  XPStyleActnCtrls, System.Actions,
+  Data.Bind.ObjectScope, System.IOUtils,
+  Vcl.ExtCtrls, Vcl.Buttons, cxButtonEdit, Vcl.ComCtrls, System.ImageList,
+  Vcl.ImgList;
 
 const
    RegistryRoot = 'Software\Colateral\Axiom';
@@ -18,31 +19,31 @@ const
 
 type
   TfrmMain = class(TForm)
-    btnStart: TcxButton;
-    btnCancel: TcxButton;
-    cxLabel1: TcxLabel;
-    edBackupDir: TcxButtonEdit;
     OpenDialog: TJvOpenDialog;
-    cxLabel2: TcxLabel;
-    cxRadioGroup1: TcxRadioGroup;
-    cxLabel4: TcxLabel;
-    cbDatabase: TcxComboBox;
     ActionManager1: TActionManager;
     actStart: TAction;
-    cxLabel3: TcxLabel;
-    edSYSPassword: TcxTextEdit;
-    cxLabel5: TcxLabel;
-    edSchemaPassword: TcxTextEdit;
-    cxLabel6: TcxLabel;
+    btnStart: TBitBtn;
+    btnCancel: TBitBtn;
+    Memo1: TMemo;
+    RadioGroup1: TRadioGroup;
+    edSYSPassword: TEdit;
+    edSchemaPassword: TEdit;
+    Label1: TLabel;
+    Label2: TLabel;
+    Label3: TLabel;
+    cbDatabase: TComboBoxEx;
+    Label4: TLabel;
+    Label5: TLabel;
+    edBackupDir: TButtonedEdit;
+    ImageList1: TImageList;
     procedure FormCreate(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure btnCancelClick(Sender: TObject);
-    procedure edBackupDirPropertiesButtonClick(Sender: TObject;
-      AButtonIndex: Integer);
-    procedure cxRadioGroup1Click(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure actStartUpdate(Sender: TObject);
     procedure actStartExecute(Sender: TObject);
+    procedure RadioGroup1Click(Sender: TObject);
+    procedure edBackupDirRightButtonClick(Sender: TObject);
   private
     { Private declarations }
     FINIstartup: TINIFile;
@@ -317,40 +318,11 @@ begin
    Close;
 end;
 
-procedure TfrmMain.edBackupDirPropertiesButtonClick(Sender: TObject;
-  AButtonIndex: Integer);
+procedure TfrmMain.edBackupDirRightButtonClick(Sender: TObject);
 begin
    if OpenDialog.Execute then
    begin
       edBackupDir.Text := OpenDialog.FileName;
-   end;
-end;
-
-procedure TfrmMain.cxRadioGroup1Click(Sender: TObject);
-var
-   LOptions, i: integer;
-   LTmp: string;
-begin
-   cbDatabase.Text := '';
-   Case TcxRadioGroup(Sender).ItemIndex of
-      0: begin
-            FOptionsNET := False;
-            cbDatabase.Properties.Items.Clear;
-            ParseTnsNames;
-         end;
-      1: begin
-            FOptionsNET := True;
-            FINIstartup := TINIFile.Create(ExtractFilePath(Application.EXEName) + 'Axiom.INI');
-            LOptions := StrToInt(FINIstartup.ReadString('Main', 'Options', '0'));
-
-            cbDatabase.Properties.Items.Clear;
-            for i := 1 to LOptions do
-            begin
-               LTmp := FINIstartup.ReadString('Option' + IntToStr(i), 'Name', '');
-               if LTmp <> '' then
-                 cbDatabase.Properties.Items.Add(LTmp);
-            end;
-         end;
    end;
 end;
 
@@ -421,16 +393,44 @@ begin
          begin
             s:= Copy(TNSList.Strings[Index],1, length(trim(TNSList.Strings[Index]))-1);
             if (Pos('CONNECTION',s) = 0) then
-               cbDatabase.Properties.Items.Add(Trim(s));
+               cbDatabase.Items.Add(Trim(s));
          end;
    finally
       TNSList.Free;
    end;
 end;
 
+procedure TfrmMain.RadioGroup1Click(Sender: TObject);
+var
+   LOptions, i: integer;
+   LTmp: string;
+begin
+   cbDatabase.Text := '';
+   Case TRadioGroup(Sender).ItemIndex of
+      0: begin
+            FOptionsNET := False;
+            cbDatabase.Items.Clear;
+            ParseTnsNames;
+         end;
+      1: begin
+            FOptionsNET := True;
+            FINIstartup := TINIFile.Create(ExtractFilePath(Application.EXEName) + 'Axiom.INI');
+            LOptions := StrToInt(FINIstartup.ReadString('Main', 'Options', '0'));
+
+            cbDatabase.Items.Clear;
+            for i := 1 to LOptions do
+            begin
+               LTmp := FINIstartup.ReadString('Option' + IntToStr(i), 'Name', '');
+               if LTmp <> '' then
+                 cbDatabase.Items.Add(LTmp);
+            end;
+         end;
+   end;
+end;
+
 procedure TfrmMain.FormShow(Sender: TObject);
 begin
-   cxRadioGroup1.ItemIndex := 1;
+   RadioGroup1.ItemIndex := 1;
    if (bAutoLoad = True) then
       Self.WindowState := wsMinimized;
 end;
