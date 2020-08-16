@@ -1,25 +1,54 @@
 unit Main;
-
+{
+*********************************************************************************
+*********************************************************************************
+**                                                                             **
+**  BM comments 15/08/2020 outlining run Parameters for when running           **
+**  in silent mode                                                             **
+**                                                                             **
+**  Alex's existing code handles the following params                          **
+**  FN (filename) DB (database) /TT (Debug string)                             **
+**  I've kept the first 2 for Import Filename and Database to Refresh          **
+**  I've replaced the 3rd one with SDP for Sys Db Pword                        **
+**  I've added a 4th one, SOP for Schema Owner Pword                           **
+**  I've added a 5th (optional) one, DCM for Db Connection Method              **
+**  I've kept the original Param code in a condition ParamCount = 3            **
+**  I've wrapped my Param code in a condition Paramcount > 3                   **
+**                                                                             **
+**  User should use the following format for adding params                     **
+**  "Load_DB.exe FN[filename] DB[Schema name] SDP[Sys DB pw]                   **
+**               SOP[Schema Owner pw] [blank] OR DCM[DB Connection method]"    **
+**  Here's a valid user input example(assuming filename = Myfilename etc)...   **
+**  "Load_DB.exe FNMyfilename DBMySchemaname SDPMysysdbpw SOPMyschemaownerpw"  **
+**  The above can be pasted for testing first 4 params                         **
+**                                                                             **
+*********************************************************************************
+*********************************************************************************
+}
 interface
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, Registry, Menus,
   StdCtrls, DateUtils, ShellAPI,
-  JvDialogs, INIFiles, ActnList, ActnMan,
+  JvDialogs,
+  INIFiles, ActnList, ActnMan,
   StrUtils,  XPStyleActnCtrls, System.Actions,
   Data.Bind.ObjectScope, System.IOUtils,
-  Vcl.ExtCtrls, Vcl.Buttons, cxButtonEdit, Vcl.ComCtrls, System.ImageList,
+  Vcl.ExtCtrls, Vcl.Buttons,  System.UITypes,
+  //cxButtonEdit,
+  Vcl.ComCtrls, System.ImageList,
   Vcl.ImgList;
 
 const
    RegistryRoot = 'Software\Colateral\Axiom';
    sysPassword = 'password';
    AxiomPassword = 'regdeL99';
+   loaddbPassword = 'regdeL99';
 
 type
   TfrmMain = class(TForm)
-    OpenDialog: TJvOpenDialog;
+   // OpenDialog: TJvOpenDialog;
     ActionManager1: TActionManager;
     actStart: TAction;
     btnStart: TBitBtn;
@@ -36,6 +65,7 @@ type
     Label5: TLabel;
     edBackupDir: TButtonedEdit;
     ImageList1: TImageList;
+    OpenDialog: TJvOpenDialog;
     procedure FormCreate(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure btnCancelClick(Sender: TObject);
@@ -52,11 +82,19 @@ type
     sImportFile: string;
     dbName: string;
     Debug: string;
+    DBconnexMethod: string;
+    ownerPW: string;
+    dbPW: string;
+    bSilentMode: boolean;
     function GetOraHome: string;
     procedure ParseTnsNames;
     procedure CreateParFile(ATmpDir: string);
     procedure CreateBatchFile(ATmpDir: string);
     procedure CreateUserFile(ATmpDir: string);
+    function TempDir : string;
+    procedure DelFilesFromDir(sDirectory, sFileMask: string);
+
+
   public
     { Public declarations }
   end;
@@ -74,7 +112,7 @@ var
    j: integer;
 begin
    bAutoLoad := False;
-   if (ParamCount > 2) then
+      if (ParamCount = 3) then
    begin
       for j := 1 to ParamCount do
       begin
@@ -102,6 +140,29 @@ begin
         LRegAxiom.Free;
       end;
    end;
+
+   bSilentMode := false;
+   if (ParamCount > 3) then
+   begin
+      for j := 1 to ParamCount do
+      begin
+         if (Pos('FN', ParamStr(j)) > 0)  then
+            sImportFile := Copy(ParamStr(j),3, length(ParamStr(j))-2);
+         if (Pos('DB', ParamStr(j)) > 0) then
+            dbName := Copy(ParamStr(j),3, length(ParamStr(j))-2);
+         if (Pos('SDP', ParamStr(j)) > 0) then
+            dbPW := Copy(ParamStr(j),4, length(ParamStr(j))-3);
+         if (Pos('SOP', ParamStr(j)) > 0) then
+            ownerPW := Copy(ParamStr(j),4, length(ParamStr(j))-3);
+         if (Pos('DCM', ParamStr(j)) > 0) then
+            DBconnexMethod := Copy(ParamStr(j),4, length(ParamStr(j))-3)
+         else
+            DBconnexMethod := 'Direct';
+      end;
+  //    showmessage(sImportFile +' - '+ dbName +' - '+ dbPW + ' - ' + ownerPW + ' - ' + DBconnexMethod);
+      bSilentMode := true; // not the same as AutoLoad
+      actStartExecute(Sender);
+   end;
    btnCancel.Caption := 'Cancel';
 end;
 
@@ -123,6 +184,8 @@ begin
          LRegAxiom.free;
       end;
    end;
+   if bSilentMode then
+     Application.Terminate;    // make sure the app closes if in silent mode
 end;
 
 procedure TfrmMain.CreateParFile(ATmpDir: string);
@@ -148,7 +211,10 @@ begin
    WriteLn(F, S);
    S := 'FULL=N';
    WriteLn(F, S);
-   S := 'fromuser=axiom';
+   if bSilentMode then
+     S := 'fromuser=loaddb'
+   else
+     S := 'fromuser=axiom';
    WriteLn(F, S);
    S := 'GRANTS=y';
    WriteLn(F, S);
@@ -303,11 +369,21 @@ begin
    begin
       Reset(F);
    end;
-   S := 'sqlplus "sys/'+Trim(edSYSPassword.Text)+'@'+cbDatabase.Text+' as sysdba" @"'+
-         IncludeTrailingPathDelimiter(ATmpDir)+'cr_axiom_user.sql"';
-   WriteLn(F, S);
-   S := 'imp axiom/'+Trim(edSchemaPassword.Text)+'@'+cbDatabase.Text+' parfile=import.txt';
-   WriteLn(F, S);
+   if bSilentMode then
+     begin
+       S := '@echo off > NUL';
+       WriteLn(F, S);
+       S := 'imp loaddb/'+Trim(edSchemaPassword.Text)+'@'+cbDatabase.Text+' parfile=import.txt';
+       WriteLn(F, S);
+     end
+   else
+     begin
+       S := 'sqlplus "sys/'+Trim(edSYSPassword.Text)+'@'+cbDatabase.Text+' as sysdba" @"'+
+          IncludeTrailingPathDelimiter(ATmpDir)+'cr_axiom_user.sql"';
+       WriteLn(F, S);
+       S := 'imp axiom/'+Trim(edSchemaPassword.Text)+'@'+cbDatabase.Text+' parfile=import.txt';
+       WriteLn(F, S);
+     end;
    S := 'exit';
    WriteLn(F, S);
    CloseFile(F);
@@ -435,6 +511,13 @@ begin
       Self.WindowState := wsMinimized;
 end;
 
+function TfrmMain.TempDir : string;
+begin
+  Result := '';
+  if CreateDir('c:\Conflicts\aaazzz') then
+    Result := 'c:\Conflicts\aaazzz';
+end;
+
 procedure TfrmMain.actStartExecute(Sender: TObject);
 var
 //   FileName: string;
@@ -446,17 +529,20 @@ var
    bPrompt: integer;
 begin
    bPrompt := mrYes;
-   if (bAutoLoad = False) then
+   if (bAutoLoad = False) and (not bSilentMode) then
       bPrompt := MessageDlg('You are about to replace the DATABASE.  This will delete all data and replace it with the import.  Continue?',
                  mtConfirmation, [mbYes, mbNo], 0);
 
    if (bPrompt = mrYes) then
    begin
       TmpDir := TPath.GetLibraryPath;
+      if bSilentMode then
+        TmpDir := TempDir;
 //      TmpDir := ExtractFileDir(edBackupDir.Text);
 
       ExecuteFile := '"'+IncludeTrailingPathDelimiter(TmpDir) +'import_db.bat"';
-      CreateUserFile(TmpDir);
+      if not bSilentMode then
+        CreateUserFile(TmpDir);
       CreateParFile(TmpDir);
       CreateBatchFile(TmpDir);
    //   LRet :=  ShellExecute(Application.MainForm.Handle, nil,
@@ -470,7 +556,7 @@ begin
         lpFile := PWideChar(ExecuteFile);
         lpDirectory := PWideChar(ExtractFileDir(edBackupDir.Text));
 
-        nShow := SW_NORMAL;  //SW_SHOWMINIMIZED;  //  SW_SHOWNORMAL;
+        nShow := SW_SHOWMINIMIZED;  //  SW_SHOWNORMAL; SW_NORMAL;  //
       end;
       if ShellExecuteEx(@SEInfo) then
       begin
@@ -481,7 +567,8 @@ begin
          Application.Terminated;
          if bAutoLoad = False then
          begin
-            ShowMessage('Import Finished.') ;
+            if not bSilentMode then
+              ShowMessage('Import Finished.') ;
             btnCancel.Caption := 'Close';
             btnStart.Enabled := False;
          end;
@@ -489,8 +576,29 @@ begin
       DeleteFile('import.txt');
       DeleteFile('"'+IncludeTrailingPathDelimiter(TmpDir) +'cr_axiom_user.sql"');
       DeleteFile('"'+IncludeTrailingPathDelimiter(TmpDir) +'import_db.bat"');
+      if bSilentMode then
+        begin
+          DeleteFile(IncludeTrailingPathDelimiter(TmpDir) + 'import.txt');
+          DeleteFile(IncludeTrailingPathDelimiter(TmpDir) + 'import_db.bat');
+          RemoveDir(tmpDir);
+        end;
       Self.Close;
    end;
+end;
+
+procedure TfrmMain.DelFilesFromDir(sDirectory, sFileMask: string);
+var
+  s: string;
+  FOS: TSHFileOpStruct;
+begin
+  FillChar(FOS, SizeOf(FOS), 0);
+  FOS.Wnd := Application.MainForm.Handle;
+  FOS.wFunc := FO_DELETE;
+  s := sDirectory + '\' + sFileMask + #0;
+  FOS.pFrom := PChar(s);
+ // FOS.fFlags := FOS.fFlags OR FOF_NOCONFIRMATION;
+  FOS.fFlags := FOS.fFlags OR FOF_SILENT;
+  SHFileOperation(FOS);
 end;
 
 procedure TfrmMain.actStartUpdate(Sender: TObject);
@@ -500,3 +608,65 @@ begin
 end;
 
 end.
+
+// execute immediate 'alter table "DB_NAME"."' || i.OBJECT_NAME || '" DISABLE CONSTRAINT ' || j.CONSTRAINT_NAME;
+
+{CREATE OR REPLACE PROCEDURE DISPLAY_CONSTRAINT_DATABASE AS
+BEGIN
+    FOR i IN (SELECT DISTINCT OWNER, OBJECT_NAME FROM ALL_OBJECTS WHERE OBJECT_TYPE = 'TABLE' AND OWNER = 'DB_NAME')
+    LOOP
+        FOR j IN (SELECT CONSTRAINT_NAME FROM ALL_CONSTRAINTS WHERE owner = i.OWNER AND table_name = i.OBJECT_NAME AND CONSTRAINT_TYPE='R')
+        LOOP
+            dbms_utility.exec_ddl_statement('alter table "DB_NAME.' || i.OBJECT_NAME || ' DISABLE CONSTRAINT ' || j.CONSTRAINT_NAME);
+        END LOOP;
+    END LOOP;
+END DISPLAY_CONSTRAINT_DATABASE;}
+
+{
+SET SERVEROUTPUT ON
+exec dbms_output.enable(1000000);
+DECLARE
+    v_typ          VARCHAR2(32);
+    v_name         VARCHAR2(32);
+    v_constraint   VARCHAR2(32);
+    v_sql          VARCHAR2(100);
+
+
+      CURSOR c_constraints IS
+        SELECT table_name, constraint_name
+        FROM   user_constraints
+        --WHERE  constraint_type = 'R'
+        ;
+BEGIN
+
+OPEN c_constraints;
+
+    LOOP
+	    BEGIN
+			FETCH c_constraints
+			INTO  v_name, v_constraint;
+
+			EXIT WHEN c_constraints%NOTFOUND;
+			v_sql := 'alter table ' || v_name || ' DISABLE constraint ' || v_constraint;
+			DBMS_OUTPUT.put_line(v_sql);
+
+			EXECUTE IMMEDIATE v_sql;
+		EXCEPTION
+			WHEN OTHERS THEN
+			DBMS_OUTPUT.put_line('Error in exec ' || v_sql);
+		END;
+    END LOOP;
+
+    CLOSE c_constraints;
+
+
+    v_sql := 'PURGE RECYCLEBIN';
+    DBMS_OUTPUT.put_line(v_sql);
+
+    EXECUTE IMMEDIATE v_sql;
+
+END;
+/
+
+EXIT;
+}
