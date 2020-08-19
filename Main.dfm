@@ -388,4 +388,22 @@ object frmMain: TfrmMain
     Left = 368
     Top = 120
   end
+  object Con: TADOConnection
+    ConnectionString = 'Provider=MSDAORA.1;Persist Security Info=False'
+    LoginPrompt = False
+    Provider = 'MSDAORA.1'
+    Left = 240
+    Top = 56
+  end
+  object qryConstraints: TADOQuery
+    Connection = Con
+    Parameters = <>
+    Left = 304
+    Top = 40
+  end
+  object qryTables: TADOQuery
+    Parameters = <>
+    Left = 360
+    Top = 88
+  end
 end

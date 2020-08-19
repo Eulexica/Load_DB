@@ -20,7 +20,7 @@ unit Main;
 **               SOP[Schema Owner pw] [blank] OR DCM[DB Connection method]"    **
 **  Here's a valid user input example(assuming filename = Myfilename etc)...   **
 **  "Load_DB.exe FNMyfilename DBMySchemaname SDPMysysdbpw SOPMyschemaownerpw"  **
-**  The above can be pasted for testing first 4 params                         **
+**  The above can be pasted into command line for testing first 4 params       **
 **                                                                             **
 *********************************************************************************
 *********************************************************************************
@@ -38,7 +38,7 @@ uses
   Vcl.ExtCtrls, Vcl.Buttons,  System.UITypes,
   //cxButtonEdit,
   Vcl.ComCtrls, System.ImageList,
-  Vcl.ImgList;
+  Vcl.ImgList, Data.DB, Data.Win.ADODB;
 
 const
    RegistryRoot = 'Software\Colateral\Axiom';
@@ -66,6 +66,9 @@ type
     edBackupDir: TButtonedEdit;
     ImageList1: TImageList;
     OpenDialog: TJvOpenDialog;
+    Con: TADOConnection;
+    qryConstraints: TADOQuery;
+    qryTables: TADOQuery;
     procedure FormCreate(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure btnCancelClick(Sender: TObject);
@@ -93,7 +96,9 @@ type
     procedure CreateUserFile(ATmpDir: string);
     function TempDir : string;
     procedure DelFilesFromDir(sDirectory, sFileMask: string);
-
+    function DisableConstraints : string;
+    procedure PrepForImport;
+    function DropTablesAndConstraints : string;
 
   public
     { Public declarations }
@@ -512,10 +517,28 @@ begin
 end;
 
 function TfrmMain.TempDir : string;
+var
+  s : string;
 begin
   Result := '';
-  if CreateDir('c:\Conflicts\aaazzz') then
-    Result := 'c:\Conflicts\aaazzz';
+  s := TPath.GetLibraryPath + '\conflicts\aaazzz';
+  if CreateDir(s) then
+    Result := s;
+end;
+
+procedure TfrmMain.PrepForImport;
+var
+  DB :  string;
+begin
+  exit;
+  Con.ConnectionString := 'Provider=MSDAORA.1;Password=' + loaddbpassword + ';User ID=loaddb;Data Source=Insight;Persist Security Info=True';
+  Con.Connected := true;
+  //qryConstraints.sql.text := DisableConstraints;
+  //qryConstraints.execSQL;
+  qryTables.sql.text := DropTablesAndConstraints;
+  qryTables.execSQL;
+  Con.connected := false;
+
 end;
 
 procedure TfrmMain.actStartExecute(Sender: TObject);
@@ -537,7 +560,10 @@ begin
    begin
       TmpDir := TPath.GetLibraryPath;
       if bSilentMode then
-        TmpDir := TempDir;
+        begin
+          TmpDir := TempDir;
+          PrepForImport;
+        end;
 //      TmpDir := ExtractFileDir(edBackupDir.Text);
 
       ExecuteFile := '"'+IncludeTrailingPathDelimiter(TmpDir) +'import_db.bat"';
@@ -560,6 +586,7 @@ begin
       end;
       if ShellExecuteEx(@SEInfo) then
       begin
+
         repeat
           Application.ProcessMessages;
           GetExitCodeProcess(SEInfo.hProcess, ExitCode) ;
@@ -607,66 +634,73 @@ begin
                        (edSYSPassword.Text <> '') and (edSchemaPassword.Text <> '') ;
 end;
 
+function TfrmMain.DisableConstraints : string;
+var
+  qsR, qsAxiom, qsAlterTable, qsDisableConstraint : string;
+begin
+  qsR := QuotedStr(' R ');
+  qsAxiom := QuotedStr(' AXIOM ');
+  qsAlterTable := QuotedStr(' alter table ');
+  qsDisableConstraint := QuotedStr(' disable constraint ');
+
+  Result := ' DECLARE '
+
+  +  ' BEGIN '
+
+ +  '  FOR iloop IN (SELECT constraint_name, table_name  '
+
+       + '            FROM all_constraints '
+
+    + '              WHERE constraint_type = ' + qsR + ' AND owner = ' + qsAxiom
+
+ + '  LOOP      '
+
+     + ' BEGIN   '
+
+       + '  EXECUTE IMMEDIATE (  ' +  qsAlterTable
+
+         + '                   || iloop.table_name   '
+
+          + '                  || ' +  qsDisableConstraint
+
+          + '                  || iloop.constraint_name    '
+
+       + '                    );     '
+
+    + '  EXCEPTION      '
+
+      + '   WHEN OTHERS    '
+
+    + '     THEN        '
+
+   + '         NULL;     '
+
+   + '   END;      '
+
+  + ' END LOOP;  '
+
+  + ' END;'
+
+   + ' / '
+
+  + ' Exit ';
+
+end;
+
+function TfrmMain.DropTablesAndConstraints : string;
+var
+  qsDropTable, qsCascadeConstraints : string;
+begin
+  qsDropTable := QuotedStr(' drop table ');
+  qsCascadeConstraints := QuotedStr(' cascade constraints ');
+
+  Result := ' begin  ' +
+        ' for i in (select * from tabs) loop ' +
+        ' execute immediate ('+ qsDropTable + ' || i.table_name || ' + qsCascadeConstraints + '); ' +
+        ' end loop; ' +
+        ' end;  ';
+
+end;
+
 end.
 
-// execute immediate 'alter table "DB_NAME"."' || i.OBJECT_NAME || '" DISABLE CONSTRAINT ' || j.CONSTRAINT_NAME;
-
-{CREATE OR REPLACE PROCEDURE DISPLAY_CONSTRAINT_DATABASE AS
-BEGIN
-    FOR i IN (SELECT DISTINCT OWNER, OBJECT_NAME FROM ALL_OBJECTS WHERE OBJECT_TYPE = 'TABLE' AND OWNER = 'DB_NAME')
-    LOOP
-        FOR j IN (SELECT CONSTRAINT_NAME FROM ALL_CONSTRAINTS WHERE owner = i.OWNER AND table_name = i.OBJECT_NAME AND CONSTRAINT_TYPE='R')
-        LOOP
-            dbms_utility.exec_ddl_statement('alter table "DB_NAME.' || i.OBJECT_NAME || ' DISABLE CONSTRAINT ' || j.CONSTRAINT_NAME);
-        END LOOP;
-    END LOOP;
-END DISPLAY_CONSTRAINT_DATABASE;}
-
-{
-SET SERVEROUTPUT ON
-exec dbms_output.enable(1000000);
-DECLARE
-    v_typ          VARCHAR2(32);
-    v_name         VARCHAR2(32);
-    v_constraint   VARCHAR2(32);
-    v_sql          VARCHAR2(100);
-
-
-      CURSOR c_constraints IS
-        SELECT table_name, constraint_name
-        FROM   user_constraints
-        --WHERE  constraint_type = 'R'
-        ;
-BEGIN
-
-OPEN c_constraints;
-
-    LOOP
-	    BEGIN
-			FETCH c_constraints
-			INTO  v_name, v_constraint;
-
-			EXIT WHEN c_constraints%NOTFOUND;
-			v_sql := 'alter table ' || v_name || ' DISABLE constraint ' || v_constraint;
-			DBMS_OUTPUT.put_line(v_sql);
-
-			EXECUTE IMMEDIATE v_sql;
-		EXCEPTION
-			WHEN OTHERS THEN
-			DBMS_OUTPUT.put_line('Error in exec ' || v_sql);
-		END;
-    END LOOP;
-
-    CLOSE c_constraints;
-
-
-    v_sql := 'PURGE RECYCLEBIN';
-    DBMS_OUTPUT.put_line(v_sql);
-
-    EXECUTE IMMEDIATE v_sql;
-
-END;
-/
-
-EXIT;
-}
