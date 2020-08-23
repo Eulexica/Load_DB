@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <BorlandProject>
 	<Transactions>
-    <Transaction>2013/05/17 12:19:11.000.503,D:\perforce\DB_Load - Axiom\DB_Load.dproj=D:\perforce\DB_Load - Axiom\DB_Load_XE2.dproj</Transaction>
-    <Transaction>2020/08/02 16:08:14.000.141,D:\Insight_XE4_Source\Load_DB\DB_Load_XE2.dproj=D:\Insight_XE4_Source\Load_DB\Load_DB.dproj</Transaction>
+    <Transaction>2013/05/17 12:19:11.000.503,D:\perforce\DB_Load - Axiom\DB_Load_XE2.dproj=D:\perforce\DB_Load - Axiom\DB_Load.dproj</Transaction>
+    <Transaction>2020/08/02 16:08:14.000.141,D:\Insight_XE4_Source\Load_DB\Load_DB.dproj=D:\Insight_XE4_Source\Load_DB\DB_Load_XE2.dproj</Transaction>
   </Transactions>
 </BorlandProject>

@@ -530,8 +530,9 @@ procedure TfrmMain.PrepForImport;
 var
   DB :  string;
 begin
-  exit;
-  Con.ConnectionString := 'Provider=MSDAORA.1;Password=' + loaddbpassword + ';User ID=loaddb;Data Source=Insight;Persist Security Info=True';
+  //exit;
+  Con.ConnectionString := 'Provider=MSDAORA.1;Password=regdeL99' +
+          ';User ID=loaddb;Data Source=' + dbName + ';Persist Security Info=True';
   Con.Connected := true;
   //qryConstraints.sql.text := DisableConstraints;
   //qryConstraints.execSQL;
