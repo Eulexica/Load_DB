@@ -228,14 +228,6 @@ object frmMain: TfrmMain
     TabOrder = 7
     OnRightButtonClick = edBackupDirRightButtonClick
   end
-  object OpenDialog: TJvOpenDialog
-    Filter = 'Database export (*.dmp)|*.DMP'
-    Options = [ofHideReadOnly, ofPathMustExist, ofEnableSizing]
-    Height = 454
-    Width = 563
-    Left = 355
-    Top = 112
-  end
   object ActionManager1: TActionManager
     Left = 360
     Top = 34
@@ -389,5 +381,29 @@ object frmMain: TfrmMain
       0000000000000000000000000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000
       000000000000}
+  end
+  object OpenDialog: TJvOpenDialog
+    Height = 0
+    Width = 0
+    Left = 368
+    Top = 120
+  end
+  object Con: TADOConnection
+    ConnectionString = 'Provider=MSDAORA.1;Persist Security Info=False'
+    LoginPrompt = False
+    Provider = 'MSDAORA.1'
+    Left = 240
+    Top = 56
+  end
+  object qryConstraints: TADOQuery
+    Connection = Con
+    Parameters = <>
+    Left = 304
+    Top = 40
+  end
+  object qryTables: TADOQuery
+    Parameters = <>
+    Left = 360
+    Top = 88
   end
 end

@@ -12,6 +12,10 @@ begin
   Application.Initialize;
   TStyleManager.TrySetStyle('Iceberg Classico');
   Application.Title := 'Database Load';
+  if paramcount > 3 then begin
+    Application.ShowMainForm:=false;
+    Application.MainFormOnTaskbar := true;
+  end;
   Application.CreateForm(TfrmMain, frmMain);
   Application.Run;
 end.
