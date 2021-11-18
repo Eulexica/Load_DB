@@ -4,7 +4,7 @@ object frmMain: TfrmMain
   BorderIcons = [biSystemMenu, biMinimize]
   BorderStyle = bsDialog
   Caption = 'Database Load'
-  ClientHeight = 400
+  ClientHeight = 376
   ClientWidth = 404
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
@@ -17,22 +17,11 @@ object frmMain: TfrmMain
   OnClose = FormClose
   OnCreate = FormCreate
   OnShow = FormShow
+  DesignSize = (
+    404
+    376)
   PixelsPerInch = 96
   TextHeight = 13
-  object Label1: TLabel
-    Left = 16
-    Top = 142
-    Width = 123
-    Height = 13
-    Caption = 'SYS Database Password:'
-  end
-  object Label2: TLabel
-    Left = 16
-    Top = 167
-    Width = 132
-    Height = 13
-    Caption = 'Schema Owner Password:'
-  end
   object Label3: TLabel
     Left = 16
     Top = 116
@@ -66,12 +55,19 @@ object frmMain: TfrmMain
     Font.Style = [fsBold]
     ParentFont = False
   end
+  object Label6: TLabel
+    Left = 16
+    Top = 147
+    Width = 3
+    Height = 13
+  end
   object btnStart: TBitBtn
     Left = 77
-    Top = 364
+    Top = 342
     Width = 81
     Height = 27
     Action = actStart
+    Anchors = [akLeft, akBottom]
     Caption = 'Start'
     Glyph.Data = {
       36040000424D3604000000000000360000002800000010000000100000000100
@@ -108,13 +104,14 @@ object frmMain: TfrmMain
       C2FFE4C7ACFFCBA17FF75D493878000000050000000100000000000000000000
       00000000000000000001201A142A755D4890A98668CED1A580FCD1A580FCAA86
       68CE755C4891201A142C00000003000000010000000000000000}
-    TabOrder = 4
+    TabOrder = 2
   end
   object btnCancel: TBitBtn
     Left = 231
-    Top = 364
+    Top = 342
     Width = 81
     Height = 27
+    Anchors = [akLeft, akBottom]
     Caption = 'Cancel'
     Glyph.Data = {
       36040000424D3604000000000000360000002800000010000000100000000100
@@ -152,18 +149,19 @@ object frmMain: TfrmMain
       000000000000000000031213232D40437D935D61B5D07378DFFC7378DFFC5D61
       B5D040437D951212223000000004000000010000000000000000}
     ParentDoubleBuffered = True
-    TabOrder = 5
+    TabOrder = 3
     OnClick = btnCancelClick
   end
   object Memo1: TMemo
     Left = 9
-    Top = 247
+    Top = 225
     Width = 377
     Height = 113
+    Anchors = [akLeft, akBottom]
     Lines.Strings = (
       
-        'This progarm should be run by a user with Administrator privileg' +
-        'es on '
+        'This progam should be run by a user with Administrator privilege' +
+        's on '
       'the computer. '
       ''
       
@@ -175,37 +173,22 @@ object frmMain: TfrmMain
       'SYSTEM.')
     ParentColor = True
     ReadOnly = True
-    TabOrder = 6
+    TabOrder = 4
   end
   object RadioGroup1: TRadioGroup
     Left = 9
-    Top = 196
+    Top = 174
     Width = 377
     Height = 41
+    Anchors = [akLeft, akBottom]
     Caption = 'Database Connection Method'
     Columns = 2
     ItemIndex = 0
     Items.Strings = (
       'Tnsnames'
       'Direct')
-    TabOrder = 3
-    OnClick = RadioGroup1Click
-  end
-  object edSYSPassword: TEdit
-    Left = 152
-    Top = 139
-    Width = 121
-    Height = 21
-    PasswordChar = '*'
     TabOrder = 1
-  end
-  object edSchemaPassword: TEdit
-    Left = 152
-    Top = 164
-    Width = 121
-    Height = 21
-    PasswordChar = '*'
-    TabOrder = 2
+    OnClick = RadioGroup1Click
   end
   object cbDatabase: TComboBoxEx
     Left = 152
@@ -225,12 +208,12 @@ object frmMain: TfrmMain
     RightButton.ImageIndex = 0
     RightButton.PressedImageIndex = 0
     RightButton.Visible = True
-    TabOrder = 7
+    TabOrder = 5
     OnRightButtonClick = edBackupDirRightButtonClick
   end
   object ActionManager1: TActionManager
-    Left = 360
-    Top = 34
+    Left = 336
+    Top = 18
     StyleName = 'XP Style'
     object actStart: TAction
       Caption = 'Start'
@@ -383,27 +366,126 @@ object frmMain: TfrmMain
       000000000000}
   end
   object OpenDialog: TJvOpenDialog
+    Filter = 'Database Exports|*.DMP'
     Height = 0
     Width = 0
-    Left = 368
-    Top = 120
+    Left = 352
+    Top = 104
   end
-  object Con: TADOConnection
-    ConnectionString = 'Provider=MSDAORA.1;Persist Security Info=False'
-    LoginPrompt = False
-    Provider = 'MSDAORA.1'
-    Left = 240
+  object OraSession: TOraSession
+    ConnectMode = cmSysDBA
+    Options.Direct = True
+    Options.IPVersion = ivIPBoth
+    Options.LocalFailover = True
+    Username = 'sys'
+    Server = 'dev-oracle:1521:sn=porters'
+    OnError = OraSessionError
+    Left = 8
+    Top = 8
+    EncryptedPassword = '9EFF87FF96FF90FF92FF'
+  end
+  object OraScript: TOraScript
+    OnError = OraScriptError
+    Session = OraSession
+    Left = 136
+    Top = 96
+  end
+  object DosCommand1: TDosCommand
+    InputToOutput = False
+    MaxTimeAfterBeginning = 0
+    MaxTimeAfterLastOutput = 0
+    OnTerminated = DosCommand1Terminated
+    Left = 256
     Top = 56
   end
-  object qryConstraints: TADOQuery
-    Connection = Con
-    Parameters = <>
-    Left = 304
-    Top = 40
+  object qryCheckAxiomUser: TOraQuery
+    Session = OraSession
+    SQL.Strings = (
+      'select 1'
+      'from v$session v'
+      'where username is not null'
+      'and username = '#39'AXIOM'#39)
+    Left = 200
+    Top = 136
   end
-  object qryTables: TADOQuery
-    Parameters = <>
-    Left = 360
-    Top = 88
+  object strUserSettings: TStringz
+    Strings.Strings = (
+      '   GRANT DROP USER TO axiom;'
+      '   '
+      '   GRANT CREATE SYNONYM TO axiom;'
+      '   '
+      '   GRANT ALTER USER TO axiom;'
+      '   '
+      '   GRANT CREATE DATABASE LINK TO axiom;'
+      '   '
+      '   GRANT CREATE SEQUENCE TO axiom;'
+      '   '
+      '   GRANT CREATE PUBLIC SYNONYM TO axiom;'
+      '   '
+      '   GRANT CREATE TRIGGER TO axiom;'
+      '   '
+      '   GRANT CREATE PROCEDURE TO axiom;'
+      '   '
+      '   GRANT CREATE ROLE TO axiom;'
+      '   '
+      '   GRANT ANALYZE ANY TO axiom;'
+      '   '
+      '   GRANT UNLIMITED TABLESPACE TO axiom;'
+      '   '
+      '   GRANT CREATE TABLE TO axiom WITH ADMIN OPTION;'
+      '   '
+      '   GRANT CREATE TYPE TO axiom;'
+      '   '
+      '   GRANT CREATE USER TO axiom with admin option;'
+      '   '
+      '   GRANT CREATE MATERIALIZED VIEW TO axiom WITH ADMIN OPTION;'
+      '   '
+      '   GRANT CREATE ANY VIEW TO axiom WITH ADMIN OPTION;'
+      '   '
+      '   GRANT CREATE VIEW TO axiom WITH ADMIN OPTION;'
+      '   '
+      '   GRANT DROP ANY MATERIALIZED VIEW TO AXIOM WITH ADMIN OPTION;'
+      '   '
+      '   GRANT DROP ANY VIEW TO AXIOM WITH ADMIN OPTION;'
+      '   '
+      '   GRANT CREATE OPERATOR TO axiom;'
+      '   '
+      '   GRANT CREATE JOB TO axiom;'
+      '   '
+      '   GRANT CREATE ANY CONTEXT TO axiom;'
+      '   '
+      '   GRANT CREATE INDEXTYPE TO axiom;'
+      '   '
+      '   GRANT BECOME USER TO axiom;'
+      '   '
+      '   GRANT SELECT ON SYS.V_$SESSION TO axiom;'
+      '   '
+      '   GRANT SELECT ON SYS.v_$INSTANCE TO axiom;'
+      '   '
+      '   GRANT EXECUTE ON SYS.DBMS_ALERT TO axiom_update_role;'
+      '   '
+      '   GRANT EXECUTE ON SYS.DBMS_RLS TO axiom;'
+      '   '
+      '   GRANT EXECUTE ON CTSSYS.CTX_DDL TO axiom;'
+      '   '
+      '   GRANT EXECUTE ON CTXSYS.CTX_DOC TO axiom;'
+      '   '
+      '   GRANT CREATE SESSION TO AXIOM WITH ADMIN OPTION;'
+      '   '
+      '   GRANT SELECT ON SYS.V_$lock TO AXIOM_update_role;'
+      '   '
+      '   GRANT SELECT ON SYS.V_$SESSION TO AXIOM_update_role;'
+      '   '
+      '   GRANT SELECT ON SYS.V_$process TO AXIOM_update_role;'
+      '   '
+      '   GRANT SELECT ON SYS.V_$rollname TO AXIOM_update_role;'
+      '   '
+      '   GRANT SELECT ON SYS.dba_objects TO AXIOM_update_role;'
+      '   '
+      '   grant execute on UTL_SMTP to axiom;'
+      '   '
+      '   GRANT alter any MATERIALIZED VIEW TO axiom_update_role;')
+    Left = 264
+    Top = 152
   end
 end
