@@ -10,7 +10,7 @@ uses
 
 begin
   Application.Initialize;
-  TStyleManager.TrySetStyle('Iceberg Classico');
+  TStyleManager.TrySetStyle('Glossy');
   Application.Title := 'Database Load';
   if paramcount > 3 then begin
     Application.ShowMainForm:=false;

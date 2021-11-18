@@ -34,17 +34,22 @@ uses
   JvDialogs,
   INIFiles, ActnList, ActnMan,
   StrUtils,  XPStyleActnCtrls, System.Actions,
-  Data.Bind.ObjectScope, System.IOUtils,
+  Data.Bind.ObjectScope,
   Vcl.ExtCtrls, Vcl.Buttons,  System.UITypes,
   //cxButtonEdit,
   Vcl.ComCtrls, System.ImageList,
-  Vcl.ImgList, Data.DB, Data.Win.ADODB;
+  Vcl.ImgList, Data.DB, Data.Win.ADODB, DAScript, OraScript, OraCall, DBAccess,
+  Ora, OraClasses, DosCommand, MemDS, stringz;
 
 const
    RegistryRoot = 'Software\Colateral\Axiom';
-   sysPassword = 'password';
+   sysPassword = 'regdeL99';
    AxiomPassword = 'regdeL99';
    loaddbPassword = 'regdeL99';
+
+   AltsysPassword = 'axiom';
+   AltAxiomPassword = 'axiom';
+   AltloaddbPassword = 'axiom';
 
 type
   TfrmMain = class(TForm)
@@ -55,10 +60,6 @@ type
     btnCancel: TBitBtn;
     Memo1: TMemo;
     RadioGroup1: TRadioGroup;
-    edSYSPassword: TEdit;
-    edSchemaPassword: TEdit;
-    Label1: TLabel;
-    Label2: TLabel;
     Label3: TLabel;
     cbDatabase: TComboBoxEx;
     Label4: TLabel;
@@ -66,9 +67,12 @@ type
     edBackupDir: TButtonedEdit;
     ImageList1: TImageList;
     OpenDialog: TJvOpenDialog;
-    Con: TADOConnection;
-    qryConstraints: TADOQuery;
-    qryTables: TADOQuery;
+    OraSession: TOraSession;
+    OraScript: TOraScript;
+    DosCommand1: TDosCommand;
+    Label6: TLabel;
+    qryCheckAxiomUser: TOraQuery;
+    strUserSettings: TStringz;
     procedure FormCreate(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure btnCancelClick(Sender: TObject);
@@ -77,6 +81,10 @@ type
     procedure actStartExecute(Sender: TObject);
     procedure RadioGroup1Click(Sender: TObject);
     procedure edBackupDirRightButtonClick(Sender: TObject);
+    procedure OraScriptError(Sender: TObject; E: Exception; SQL: string;
+      var Action: TErrorAction);
+    procedure DosCommand1Terminated(Sender: TObject);
+    procedure OraSessionError(Sender: TObject; E: EDAError; var Fail: Boolean);
   private
     { Private declarations }
     FINIstartup: TINIFile;
@@ -89,16 +97,18 @@ type
     ownerPW: string;
     dbPW: string;
     bSilentMode: boolean;
+    slParFile: TStringList;
+    slBatchFile: TStringList;
+    slCreateUser: TStringList;
+    FImpPassword: string;
+
+    property AImpPassword: string read FImpPassword write FImpPassword;
+
     function GetOraHome: string;
     procedure ParseTnsNames;
-    procedure CreateParFile(ATmpDir: string);
-    procedure CreateBatchFile(ATmpDir: string);
-    procedure CreateUserFile(ATmpDir: string);
-    function TempDir : string;
-    procedure DelFilesFromDir(sDirectory, sFileMask: string);
-    function DisableConstraints : string;
-    procedure PrepForImport;
-    function DropTablesAndConstraints : string;
+    procedure CreateBatchFile();
+    procedure CreateUserFile(ATmpDir: TStringList);
+    procedure EnumSubKeys(RootKey: HKEY; const Key: string);
 
   public
     { Public declarations }
@@ -111,11 +121,17 @@ implementation
 
 {$R *.dfm}
 
+uses
+System.IOUtils;
+
 procedure TfrmMain.FormCreate(Sender: TObject);
 var
    LRegAxiom: TRegistry;
    j: integer;
 begin
+   slParFile      := TStringList.Create;
+   slBatchFile    := TStringList.Create;
+   slCreateUser   := TStringList.Create;
    bAutoLoad := False;
       if (ParamCount = 3) then
    begin
@@ -175,6 +191,10 @@ procedure TfrmMain.FormClose(Sender: TObject; var Action: TCloseAction);
 var
    LRegAxiom: TRegistry;
 begin
+   slParFile.Free ;
+   slBatchFile.Free;
+   slCreateUser.Free;
+
    if bAutoLoad = False then
    begin
       LRegAxiom := TRegistry.Create;
@@ -193,205 +213,210 @@ begin
      Application.Terminate;    // make sure the app closes if in silent mode
 end;
 
-procedure TfrmMain.CreateParFile(ATmpDir: string);
+procedure TfrmMain.CreateUserFile(ATmpDir: TStringList);
 var
-  F: TextFile;
   S: string;
-  sf: string;
-//  FileHandle: integer;
-//  FileName: string;
 begin
-   DeleteFile(IncludeTrailingPathDelimiter(ATmpDir) +'import.txt');
-   sf := IncludeTrailingPathDelimiter(ATmpDir) +'import.txt';
-   AssignFile(F, sf);
-   if not (FileExists(sf)) then
-      Rewrite(F)
-   else
-   begin
-      Reset(F);
-   end;
-   S := 'BUFFER=1024000';
-   WriteLn(F, S);
-   S := 'FILE='+ edBackupDir.Text;
-   WriteLn(F, S);
-   S := 'FULL=N';
-   WriteLn(F, S);
-   if bSilentMode then
-     S := 'fromuser=loaddb'
-   else
-     S := 'fromuser=axiom';
-   WriteLn(F, S);
-   S := 'GRANTS=y';
-   WriteLn(F, S);
-   S := 'IGNORE=y';
-   WriteLn(F, S);
-//    S := 'COMPRESS=y';
-//    WriteLn(F, S);
-   CloseFile(F);
-end;
-
-procedure TfrmMain.CreateUserFile(ATmpDir: string);
-var
-  F: TextFile;
-  S: string;
-  sf: string;
-//  FileHandle: integer;
-//  FileName: string;
-begin
-   DeleteFile(IncludeTrailingPathDelimiter(ATmpDir) +'cr_axiom_user.sql');
-   sf := IncludeTrailingPathDelimiter(ATmpDir) +'cr_axiom_user.sql';
-   AssignFile(F, sf);
-   if not (FileExists(sf)) then
-      Rewrite(F)
-   else
-   begin
-      Reset(F);
-   end;
-//   S := 'drop role axiom_update_role;';
-//   WriteLn(F, S);
    S := 'create role axiom_update_role;';
-   WriteLn(F, S);
+   ATmpDir.Add(S);
    S := 'DROP USER axiom CASCADE;';
-   WriteLn(F, S);
+   ATmpDir.Add(S);
    S := 'CREATE USER axiom';
-   WriteLn(F, S);
-   S := 'IDENTIFIED BY ' + Trim(edSchemaPassword.Text);
-   WriteLn(F, S);
-   S := 'DEFAULT TABLESPACE USERS';
-   WriteLn(F, S);
-   S := 'TEMPORARY TABLESPACE TEMP';
-   WriteLn(F, S);
-   S := 'PROFILE DEFAULT';
-   WriteLn(F, S);
-   S := 'ACCOUNT UNLOCK;';
-   WriteLn(F, S);
-   S := 'GRANT axiom_UPDATE_ROLE TO axiom WITH ADMIN OPTION;';
-   WriteLn(F, S);
-   S := 'GRANT DBA TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT CTXAPP TO AXIOM;';
-   WriteLn(F, S);
-   S := 'ALTER USER AXIOM DEFAULT ROLE ALL;';
-   WriteLn(F, S);
-   S := 'GRANT RESOURCE TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT CONNECT TO axiom;';
-   WriteLn(F, S);
-   S := 'ALTER USER axiom DEFAULT ROLE DBA, RESOURCE, axiom_UPDATE_ROLE;';
-   WriteLn(F, S);
-   S := 'GRANT DROP USER TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT CREATE SYNONYM TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT ALTER USER TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT CREATE DATABASE LINK TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT CREATE SEQUENCE TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT CREATE PUBLIC SYNONYM TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT CREATE TRIGGER TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT CREATE PROCEDURE TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT CREATE ROLE TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT ANALYZE ANY TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT UNLIMITED TABLESPACE TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT CREATE TABLE TO axiom WITH ADMIN OPTION;';
-   WriteLn(F, S);
-   S := 'GRANT CREATE TYPE TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT CREATE USER TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT CREATE MATERIALIZED VIEW TO axiom WITH ADMIN OPTION;';
-   WriteLn(F, S);
-   S := 'GRANT CREATE VIEW TO axiom WITH ADMIN OPTION;';
-   WriteLn(F, S);
-   S := 'GRANT DROP ANY MATERIALIZED VIEW TO AXIOM WITH ADMIN OPTION;';
-   WriteLn(F, S);
-   S := 'GRANT DROP ANY VIEW TO AXIOM WITH ADMIN OPTION;';
-   WriteLn(F, S);
-   S := 'GRANT CREATE OPERATOR TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT CREATE JOB TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT CREATE ANY CONTEXT TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT CREATE INDEXTYPE TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT BECOME USER TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT SELECT ON SYS.V_$SESSION TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT SELECT ON SYS.v_$INSTANCE TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT EXECUTE ON SYS.DBMS_ALERT TO axiom_update_role;';
-   WriteLn(F, S);
-   S := 'GRANT EXECUTE ON SYS.DBMS_RLS TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT EXECUTE ON CTSSYS.CTX_DDL TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT EXECUTE ON CTXSYS.CTX_DOC TO axiom;';
-   WriteLn(F, S);
-   S := 'GRANT CREATE SESSION TO AXIOM WITH ADMIN OPTION;';
-   WriteLn(F, S);
-   S := 'GRANT SELECT ON SYS.V_$lock TO AXIOM_update_role;';
-   WriteLn(F, S);
-   S := 'GRANT SELECT ON SYS.V_$SESSION TO AXIOM_update_role;';
-   WriteLn(F, S);
-   S := 'GRANT SELECT ON SYS.V_$process TO AXIOM_update_role;';
-   WriteLn(F, S);
-   S := 'GRANT SELECT ON SYS.V_$rollname TO AXIOM_update_role;';
-   WriteLn(F, S);
-   S := 'GRANT SELECT ON SYS.dba_objects TO AXIOM_update_role;';
-   WriteLn(F, S);
-   S := 'grant execute on UTL_SMTP to axiom;';
-   WriteLn(F, S);
-   S := 'EXIT;';
-   WriteLn(F, S);
+   S := S + ' IDENTIFIED BY ' + Trim(AImpPassword);
+   S := S + ' DEFAULT TABLESPACE USERS';
+   S := S + ' TEMPORARY TABLESPACE TEMP';
+   S := S + ' PROFILE DEFAULT';
+   S := S + ' ACCOUNT UNLOCK;';
+   ATmpDir.Add(S);
 
-   CloseFile(F);
+   S := 'GRANT axiom_UPDATE_ROLE TO axiom WITH ADMIN OPTION;';
+   ATmpDir.Add(S);
+   S := 'GRANT DBA TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT CTXAPP TO AXIOM;';
+   ATmpDir.Add(S);
+   S := 'ALTER USER AXIOM DEFAULT ROLE ALL;';
+   ATmpDir.Add(S);
+   S := 'GRANT RESOURCE TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT CONNECT TO axiom;';
+   ATmpDir.Add(S);
+   S := 'ALTER USER axiom DEFAULT ROLE DBA, RESOURCE, axiom_UPDATE_ROLE;';
+   ATmpDir.Add(S);
+
+{   S := 'GRANT DROP USER TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT CREATE SYNONYM TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT ALTER USER TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT CREATE DATABASE LINK TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT CREATE SEQUENCE TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT CREATE PUBLIC SYNONYM TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT CREATE TRIGGER TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT CREATE PROCEDURE TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT CREATE ROLE TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT ANALYZE ANY TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT UNLIMITED TABLESPACE TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT CREATE TABLE TO axiom WITH ADMIN OPTION;';
+   ATmpDir.Add(S);
+   S := 'GRANT CREATE TYPE TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT CREATE USER TO axiom with admin option;';
+   ATmpDir.Add(S);
+   S := 'GRANT CREATE MATERIALIZED VIEW TO axiom WITH ADMIN OPTION;';
+   ATmpDir.Add(S);
+   S := 'GRANT CREATE ANY VIEW TO axiom WITH ADMIN OPTION;';
+   ATmpDir.Add(S);
+   S := 'GRANT DROP ANY MATERIALIZED VIEW TO AXIOM WITH ADMIN OPTION;';
+   ATmpDir.Add(S);
+   S := 'GRANT DROP ANY VIEW TO AXIOM WITH ADMIN OPTION;';
+   ATmpDir.Add(S);
+   S := 'GRANT CREATE OPERATOR TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT CREATE JOB TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT CREATE ANY CONTEXT TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT CREATE INDEXTYPE TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT BECOME USER TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT SELECT ON SYS.V_$SESSION TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT SELECT ON SYS.v_$INSTANCE TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT EXECUTE ON SYS.DBMS_ALERT TO axiom_update_role;';
+   ATmpDir.Add(S);
+   S := 'GRANT EXECUTE ON SYS.DBMS_RLS TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT EXECUTE ON CTSSYS.CTX_DDL TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT EXECUTE ON CTXSYS.CTX_DOC TO axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT CREATE SESSION TO AXIOM WITH ADMIN OPTION;';
+   ATmpDir.Add(S);
+   S := 'GRANT SELECT ON SYS.V_$lock TO AXIOM_update_role;';
+   ATmpDir.Add(S);
+   S := 'GRANT SELECT ON SYS.V_$SESSION TO AXIOM_update_role;';
+   ATmpDir.Add(S);
+   S := 'GRANT SELECT ON SYS.V_$process TO AXIOM_update_role;';
+   ATmpDir.Add(S);
+   S := 'GRANT SELECT ON SYS.V_$rollname TO AXIOM_update_role;';
+   ATmpDir.Add(S);
+   S := 'GRANT SELECT ON SYS.dba_objects TO AXIOM_update_role;';
+   ATmpDir.Add(S);
+   S := 'grant execute on UTL_SMTP to axiom;';
+   ATmpDir.Add(S);
+   S := 'GRANT alter any MATERIALIZED VIEW TO axiom_update_role;';
+   ATmpDir.Add(S);   }
 end;
 
-procedure TfrmMain.CreateBatchFile(ATmpDir: string);
+procedure TfrmMain.CreateBatchFile;
 var
-  F: TextFile;
   S: string;
   sf: string;
-//  FileHandle: integer;
+  UserFound: boolean;
 begin
-   DeleteFile(IncludeTrailingPathDelimiter(ATmpDir) +'import_db.bat');
-   sf := IncludeTrailingPathDelimiter(ATmpDir) +'import_db.bat';
-
-   AssignFile(F, sf);
-   if not (FileExists(sf)) then
-      Rewrite(F)
+   OraSession.Disconnect;
+   if bSilentMode then
+   begin
+//       S := '@echo off > NUL';
+//       WriteLn(F, S);
+//       S := 'imp axiom/'+Trim(edSchemaPassword.Text)+'@'+cbDatabase.Text+' parfile=import.txt';
+//       WriteLn(F, S);
+   end
    else
    begin
-      Reset(F);
-   end;
-   if bSilentMode then
-     begin
-       S := '@echo off > NUL';
-       WriteLn(F, S);
-       S := 'imp loaddb/'+Trim(edSchemaPassword.Text)+'@'+cbDatabase.Text+' parfile=import.txt';
-       WriteLn(F, S);
-     end
-   else
-     begin
-       S := 'sqlplus "sys/'+Trim(edSYSPassword.Text)+'@'+cbDatabase.Text+' as sysdba" @"'+
-          IncludeTrailingPathDelimiter(ATmpDir)+'cr_axiom_user.sql"';
-       WriteLn(F, S);
-       S := 'imp axiom/'+Trim(edSchemaPassword.Text)+'@'+cbDatabase.Text+' parfile=import.txt';
-       WriteLn(F, S);
+      try
+         case RadioGroup1.ItemIndex of
+            0: begin
+                  OraSession.Options.Direct := False;
+                  OraSession.Server      := cbDatabase.Text;
+            end;
+            1: begin
+                  OraSession.Options.Direct := True;
+                  OraSession.Server := FINIstartup.ReadString('Option' + IntToStr(cbDatabase.ItemIndex + 1), 'ServerName', '');;
+            end;
+         end;
+
+         OraSession.Username    := 'sys';
+         OraSession.Password    := AltsysPassword;   //sysPassword;
+         OraSession.ConnectMode := cmSysDBA;
+         AImpPassword := AltsysPassword;
+         try
+          OraSession.Connect;
+         except
+            OraSession.Username    := 'sys';
+            OraSession.Password    := sysPassword;   //sysPassword;
+            OraSession.ConnectMode := cmSysDBA;
+            AImpPassword := sysPassword;
+            OraSession.Connect;
+         end;
+
+         if OraSession.Connected then
+         begin
+            try
+               CreateUserFile(slCreateUser);
+               qryCheckAxiomUser.Open;
+               UserFound := not qryCheckAxiomUser.eof;
+               qryCheckAxiomUser.Close;
+
+               if UserFound = True then
+                  MessageDlg('Axiom user is connected to datbase. Database import cannot continue.', mtInformation, [mbOk], 0)
+               else
+               begin
+                  btnCancel.Enabled := False;
+                  btnStart.Enabled := False;
+                  Label6.Caption := 'Creating user....';
+                  Application.ProcessMessages;
+//                  try
+                     OraScript.SQL.AddStrings(slCreateUser);
+                     OraScript.Execute;
+
+                     OraScript.SQL.Clear;
+                     OraScript.SQL.SetStrings(strUserSettings.Strings);
+                     OraScript.Execute;
+//                  finally
+//
+//                  end;
+               end;
+            finally
+               OraSession.Disconnect;
+            end;
+         end;
+
+      finally
+         if UserFound = False then
+         begin
+            Label6.Caption := 'User Created.';
+
+            S := '';
+            S := 'imp axiom/'+Trim(AImpPassword)+'@'+cbDatabase.Text;
+            S := S + ' BUFFER=1024000';
+            S := S + ' FILE='+ edBackupDir.Text;
+            S := S + ' FULL=N';
+            S := S + ' fromuser=axiom';
+            S := S + ' GRANTS=Y';
+            S := S + ' IGNORE=Y';
+
+//         S := 'imp axiom/'+Trim(edSchemaPassword.Text)+'@'+cbDatabase.Text+' parfile=import.txt';
+            Label6.Caption := 'Import Started...';
+//            Application.ProcessMessages;
+            DosCommand1.CommandLine := S;
+            DosCommand1.Execute;
+         end;
+      end;
+
      end;
-   S := 'exit';
-   WriteLn(F, S);
-   CloseFile(F);
 end;
 
 procedure TfrmMain.btnCancelClick(Sender: TObject);
@@ -416,6 +441,8 @@ begin
    Reg := TRegistry.Create(KEY_READ or KEY_WOW64_64KEY);
    Reg.RootKey := HKEY_LOCAL_MACHINE;
    try
+      EnumSubKeys(HKEY_LOCAL_MACHINE, 'Software\Oracle');
+
       if Reg.OpenKeyReadOnly('SOFTWARE\ORACLE\ALL_HOMES\') then
       begin
          //Get last_home
@@ -451,6 +478,33 @@ begin
    finally
       Reg.CloseKey;
       Reg.Free;
+   end;
+end;
+
+procedure TfrmMain.OraScriptError(Sender: TObject; E: Exception; SQL: string;
+  var Action: TErrorAction);
+begin
+   Action := eaContinue;
+   Application.ProcessMessages;
+end;
+
+procedure TfrmMain.OraSessionError(Sender: TObject; E: EDAError;
+  var Fail: Boolean);
+begin
+   case E.ErrorCode of
+      12154:  begin
+               raise EDAError.Create(12154,'Cannot connect to database.  Check TNSnames is set up correctly.');
+      end;
+//      1921: begin
+//               Fail := False;
+//               raise EDAError.Create(1921, 'Role already exists.');
+//      end;
+      4042: begin
+               Fail := false;
+//               raise EDAError.Create(4042, e.Message);
+      end
+   else
+      ShowMessage('Oracle Error:'#13#10 + e.Message);
    end;
 end;
 
@@ -516,31 +570,6 @@ begin
       Self.WindowState := wsMinimized;
 end;
 
-function TfrmMain.TempDir : string;
-var
-  s : string;
-begin
-  Result := '';
-  s := TPath.GetLibraryPath + '\conflicts\aaazzz';
-  if CreateDir(s) then
-    Result := s;
-end;
-
-procedure TfrmMain.PrepForImport;
-var
-  DB :  string;
-begin
-  //exit;
-  Con.ConnectionString := 'Provider=MSDAORA.1;Password=regdeL99' +
-          ';User ID=loaddb;Data Source=' + dbName + ';Persist Security Info=True';
-  Con.Connected := true;
-  //qryConstraints.sql.text := DisableConstraints;
-  //qryConstraints.execSQL;
-  qryTables.sql.text := DropTablesAndConstraints;
-  qryTables.execSQL;
-  Con.connected := false;
-
-end;
 
 procedure TfrmMain.actStartExecute(Sender: TObject);
 var
@@ -549,7 +578,6 @@ var
    SEInfo: TShellExecuteInfo;
    ExitCode: DWORD;
    ExecuteFile{, ParamString, StartInString}: string;
-   TmpDir: string;
    bPrompt: integer;
 begin
    bPrompt := mrYes;
@@ -557,150 +585,59 @@ begin
       bPrompt := MessageDlg('You are about to replace the DATABASE.  This will delete all data and replace it with the import.  Continue?',
                  mtConfirmation, [mbYes, mbNo], 0);
 
+   slCreateUser.Clear;
    if (bPrompt = mrYes) then
    begin
-      TmpDir := TPath.GetLibraryPath;
       if bSilentMode then
-        begin
-          TmpDir := TempDir;
-          PrepForImport;
-        end;
+      begin
+//         PrepForImport;
+      end;
 //      TmpDir := ExtractFileDir(edBackupDir.Text);
 
-      ExecuteFile := '"'+IncludeTrailingPathDelimiter(TmpDir) +'import_db.bat"';
-      if not bSilentMode then
-        CreateUserFile(TmpDir);
-      CreateParFile(TmpDir);
-      CreateBatchFile(TmpDir);
-   //   LRet :=  ShellExecute(Application.MainForm.Handle, nil,
-   //            PChar(FileName), PChar(''), PChar(edBackupDir.Text), SW_ShowNormal);
+//      ExecuteFile := '"'+IncludeTrailingPathDelimiter(TmpDir) +'import_db.bat"';
+//      if not bSilentMode then
 
-      FillChar(SEInfo, SizeOf(SEInfo), 0) ;
-      SEInfo.cbSize := SizeOf(TShellExecuteInfo) ;
-      with SEInfo do begin
-        fMask := SEE_MASK_NOCLOSEPROCESS;
-        Wnd := Application.Handle;
-        lpFile := PWideChar(ExecuteFile);
-        lpDirectory := PWideChar(ExtractFileDir(edBackupDir.Text));
-
-        nShow := SW_SHOWMINIMIZED;  //  SW_SHOWNORMAL; SW_NORMAL;  //
-      end;
-      if ShellExecuteEx(@SEInfo) then
-      begin
-
-        repeat
-          Application.ProcessMessages;
-          GetExitCodeProcess(SEInfo.hProcess, ExitCode) ;
-        until (ExitCode <> STILL_ACTIVE) or
-         Application.Terminated;
-         if bAutoLoad = False then
-         begin
-            if not bSilentMode then
-              ShowMessage('Import Finished.') ;
-            btnCancel.Caption := 'Close';
-            btnStart.Enabled := False;
-         end;
-      end;
-      DeleteFile('import.txt');
-      DeleteFile('"'+IncludeTrailingPathDelimiter(TmpDir) +'cr_axiom_user.sql"');
-      DeleteFile('"'+IncludeTrailingPathDelimiter(TmpDir) +'import_db.bat"');
-      if bSilentMode then
-        begin
-          DeleteFile(IncludeTrailingPathDelimiter(TmpDir) + 'import.txt');
-          DeleteFile(IncludeTrailingPathDelimiter(TmpDir) + 'import_db.bat');
-          RemoveDir(tmpDir);
-        end;
-      Self.Close;
+      CreateBatchFile();
    end;
-end;
-
-procedure TfrmMain.DelFilesFromDir(sDirectory, sFileMask: string);
-var
-  s: string;
-  FOS: TSHFileOpStruct;
-begin
-  FillChar(FOS, SizeOf(FOS), 0);
-  FOS.Wnd := Application.MainForm.Handle;
-  FOS.wFunc := FO_DELETE;
-  s := sDirectory + '\' + sFileMask + #0;
-  FOS.pFrom := PChar(s);
- // FOS.fFlags := FOS.fFlags OR FOF_NOCONFIRMATION;
-  FOS.fFlags := FOS.fFlags OR FOF_SILENT;
-  SHFileOperation(FOS);
 end;
 
 procedure TfrmMain.actStartUpdate(Sender: TObject);
 begin
-   actStart.Enabled := (edBackupDir.Text <> '') and (cbDatabase.Text <> '') and
-                       (edSYSPassword.Text <> '') and (edSchemaPassword.Text <> '') ;
+   actStart.Enabled := (edBackupDir.Text <> '') and (cbDatabase.Text <> '');
 end;
 
-function TfrmMain.DisableConstraints : string;
-var
-  qsR, qsAxiom, qsAlterTable, qsDisableConstraint : string;
+procedure TfrmMain.DosCommand1Terminated(Sender: TObject);
 begin
-  qsR := QuotedStr(' R ');
-  qsAxiom := QuotedStr(' AXIOM ');
-  qsAlterTable := QuotedStr(' alter table ');
-  qsDisableConstraint := QuotedStr(' disable constraint ');
-
-  Result := ' DECLARE '
-
-  +  ' BEGIN '
-
- +  '  FOR iloop IN (SELECT constraint_name, table_name  '
-
-       + '            FROM all_constraints '
-
-    + '              WHERE constraint_type = ' + qsR + ' AND owner = ' + qsAxiom
-
- + '  LOOP      '
-
-     + ' BEGIN   '
-
-       + '  EXECUTE IMMEDIATE (  ' +  qsAlterTable
-
-         + '                   || iloop.table_name   '
-
-          + '                  || ' +  qsDisableConstraint
-
-          + '                  || iloop.constraint_name    '
-
-       + '                    );     '
-
-    + '  EXCEPTION      '
-
-      + '   WHEN OTHERS    '
-
-    + '     THEN        '
-
-   + '         NULL;     '
-
-   + '   END;      '
-
-  + ' END LOOP;  '
-
-  + ' END;'
-
-   + ' / '
-
-  + ' Exit ';
-
+   Label6.Caption := 'Import Complete';
+//   MessageDlg('Import complete', mtInformation, [mbOK], 0);
+   btnCancel.Caption := 'Close';
+   btnCancel.Enabled := True;
 end;
 
-function TfrmMain.DropTablesAndConstraints : string;
+procedure TfrmMain.EnumSubKeys(RootKey: HKEY; const Key: string);
 var
-  qsDropTable, qsCascadeConstraints : string;
+   Registry: TRegistry;
+   SubKeyNames: TStringList;
+   Name: string;
 begin
-  qsDropTable := QuotedStr(' drop table ');
-  qsCascadeConstraints := QuotedStr(' cascade constraints ');
-
-  Result := ' begin  ' +
-        ' for i in (select * from tabs) loop ' +
-        ' execute immediate ('+ qsDropTable + ' || i.table_name || ' + qsCascadeConstraints + '); ' +
-        ' end loop; ' +
-        ' end;  ';
-
+   Registry := TRegistry.Create;
+   Try
+      Registry.RootKey := RootKey;
+      Registry.OpenKeyReadOnly(Key);
+      SubKeyNames := TStringList.Create;
+      Try
+         Registry.GetKeyNames(SubKeyNames);
+         for Name in SubKeyNames do
+         begin
+            if Name = 'TNS_NAMES' then
+               Writeln(Name);
+         end;
+      Finally
+         SubKeyNames.Free;
+      End;
+   Finally
+      Registry.Free;
+   End;
 end;
 
 end.
