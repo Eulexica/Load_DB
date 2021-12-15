@@ -235,8 +235,8 @@ begin
    ATmpDir.Add(S);
    S := 'GRANT CTXAPP TO AXIOM;';
    ATmpDir.Add(S);
-   S := 'ALTER USER AXIOM DEFAULT ROLE ALL;';
-   ATmpDir.Add(S);
+//   S := 'ALTER USER AXIOM DEFAULT ROLE ALL;';
+//   ATmpDir.Add(S);
    S := 'GRANT RESOURCE TO axiom;';
    ATmpDir.Add(S);
    S := 'GRANT CONNECT TO axiom;';
