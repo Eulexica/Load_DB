@@ -24,3 +24,6 @@ $RECYCLE.BIN/
 __history/*
 *.dcu
 *.exe
+*.rsm
+Win32/*
+Win64/*
