@@ -497,13 +497,14 @@ begin
       end;
 //      1921: begin
 //               Fail := False;
-//               raise EDAError.Create(1921, 'Role already exists.');
+////               raise EDAError.Create(1921, 'Role already exists.');
 //      end;
       4042: begin
                Fail := false;
 //               raise EDAError.Create(4042, e.Message);
-      end
+      end;
    else
+      //Fail := false;
       ShowMessage('Oracle Error:'#13#10 + e.Message);
    end;
 end;

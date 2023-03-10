@@ -422,7 +422,7 @@ object frmMain: TfrmMain
       '   '
       '   GRANT CREATE PUBLIC SYNONYM TO axiom;'
       '   '
-      '   GRANT CREATE TRIGGER TO axiom;'
+      '   GRANT CREATE TRIGGER TO axiom with admin option;'
       '   '
       '   GRANT CREATE PROCEDURE TO axiom;'
       '   '
@@ -484,7 +484,17 @@ object frmMain: TfrmMain
       '   '
       '   grant execute on UTL_SMTP to axiom;'
       '   '
-      '   GRANT alter any MATERIALIZED VIEW TO axiom_update_role;')
+      
+        '   GRANT alter any MATERIALIZED VIEW TO axiom_update_role with a' +
+        'dmin option;'
+      ''
+      'grant execute on dbms_mview to axiom;'
+      ''
+      'grant execute on sys.dbms_snapshot to axiom_update_role;'
+      ''
+      'grant alter any materialized view to axiom;'
+      ''
+      'grant alter any materialized view to axiom_update_role;')
     Left = 264
     Top = 152
   end
