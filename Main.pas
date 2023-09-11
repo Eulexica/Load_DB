@@ -243,6 +243,8 @@ begin
    ATmpDir.Add(S);
    S := 'ALTER USER axiom DEFAULT ROLE DBA, RESOURCE, axiom_UPDATE_ROLE;';
    ATmpDir.Add(S);
+   S := 'GRANT CREATE SESSION TO AXIOM WITH ADMIN OPTION;';
+   ATmpDir.Add(S);
 
 {   S := 'GRANT DROP USER TO axiom;';
    ATmpDir.Add(S);
