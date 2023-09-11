@@ -30,3 +30,4 @@ Win64/*
 Win64/Debug/Load_DB.exe
 Win64/Debug/Load_DB.rsm
 Win64/Release/Axiom.ini
+*.dcu
